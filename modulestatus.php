@@ -1,7 +1,9 @@
 <?php
-//input parameter: site name
+//TODO: make this betterer
 $sitename = $argv[1];
 $siteenv = $argv[2];
+# Pulled this list from Drupal 8 Contrib Tracker where Status = Closed (won't fix)
+# https://www.drupal.org/project/issues/search/contrib_tracker?text=&assigned=&submitted=&project_issue_followers=&status%5B%5D=5&issue_tags_op=%3D&issue_tags=
 $incore = array('admin_language' => 'admin_language',
 'admin_views' => 'admin_views',
 'admin' => 'admin',
@@ -46,7 +48,6 @@ $incore = array('admin_language' => 'admin_language',
 'entitycache' => 'entitycache',
 'entityreference' => 'entityreference',
 'facetapi' => 'facetapi',
-'features' => 'features',
 'field_formatter_settings' => 'field_formatter_settings',
 'fieldable_panels_panes' => 'fieldable_panels_panes',
 'filefield' => 'filefield',
@@ -90,30 +91,41 @@ $incore = array('admin_language' => 'admin_language',
 'wysiwyg' => 'wysiwyg'
 );
 $excluded = array('pantheon_api' => 'pantheon_api');
-$unsupported = array();
-$available = array();
+$result = array();
 shell_exec('terminus auth login --format=silent 2>&1 1> /dev/null');
 $login = json_decode(shell_exec('terminus auth whoami --format=json'),true);
 echo "Logged in as: " . $login['email']. "\n";
 $framework=json_decode(shell_exec('terminus site info --site=' . $sitename . ' --field=framework --format=json'),true);
 if ($framework == 'drupal' && isset($login['email'])){
   $modules = json_decode(shell_exec('terminus drush "pm-list --type=module --no-core --status=enabled --format=json" --format=silent --env=' . $siteenv . ' --site=' .$sitename),true);
-//maybe use array_diff_ukey to push values into another array for incore?
+  $placeholder = array('name'=> NULL, 'url'=>null, 'status'=> 'Not Available');
+  $result = array_fill_keys(array_keys($modules),$placeholder);
   $alreadyin = array_intersect_key($modules,$incore);
+  foreach($alreadyin as $module =>$value){
+    $result[$module]['url'] = 'https://www.drupal.org/project/' . $module;
+    $result[$module]['status'] = "Moved to Core";
+    $result[$module]['name'] = $value['name'];
+  }
   $diff = array_diff_key($modules,$incore);
   $diff = array_diff_key($diff,$excluded);
+  $result = array_diff_key($result,$excluded);
   foreach($diff as $module => $value){
-
+    $result[$module]['url'] = 'https://www.drupal.org/project/' . $module;
+    $result[$module]['name'] = $value['name'];
     $releasexml = file_get_contents('https://updates.drupal.org/release-history/' . $module . '/8.x');
-    if(strstr($releasexml, 'No release history available for')){
-      $unsupported[$module] = $value;
+    if(strstr($releasexml, 'No release history')){
+      $result[$module]['status'] = 'Not Available';
     } else {
-      $available[$module] = $value;
+      $result[$module]['status'] = 'Available';
     }
   }
-  var_dump($available);
-  var_dump($unsupported);
-  var_dump($alreadyin);
+  asort($result);
+  var_dump($result);
+  echo  "Module,Status\n";
+  foreach($result as $module =>$value){
+    echo $value['name'] . ", ". $value['status'] .  "\n";
+  }
+  echo  "\n";
 } else {
-  exit('This is not a Drupal 7 site.');
+  exit("Exiting. This is not a Drupal 7 site.\n");
 }
