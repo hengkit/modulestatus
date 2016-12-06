@@ -1,9 +1,19 @@
 <?php
+//Callback function to only add modules out of the project list
+function moduleFilter($var){
+  if($var['type']=='module'){
+    return true;
+  } else {
+    return false;
+  }
+}
 //TODO: make this betterer
+// Eventually re-write this as a terminus plugin.
 $sitename = $argv[1];
 $siteenv = $argv[2];
 # Pulled this list from Drupal 8 Contrib Tracker where Status = Closed (won't fix)
 # https://www.drupal.org/project/issues/search/contrib_tracker?text=&assigned=&submitted=&project_issue_followers=&status%5B%5D=5&issue_tags_op=%3D&issue_tags=
+# Had to make it an associative array so that array_diff_key would work. I hate it.
 $incore = array('admin_language' => 'admin_language',
 'admin_views' => 'admin_views',
 'admin' => 'admin',
@@ -90,42 +100,61 @@ $incore = array('admin_language' => 'admin_language',
 'wysiwyg_filter' => 'wysiwyg_filter',
 'wysiwyg' => 'wysiwyg'
 );
+//Modules that we don't care about explicitly. Not really necessary using pmpi but keeping it around just in case
 $excluded = array('pantheon_api' => 'pantheon_api');
 $result = array();
+//Login with terminus
 shell_exec('terminus auth login --format=silent 2>&1 1> /dev/null');
 $login = json_decode(shell_exec('terminus auth whoami --format=json'),true);
 echo "Logged in as: " . $login['email']. "\n";
+//Checking that it is a D7 site.
 $framework=json_decode(shell_exec('terminus site info --site=' . $sitename . ' --field=framework --format=json'),true);
-if ($framework == 'drupal' && isset($login['email'])){
-  $modules = json_decode(shell_exec('terminus drush "pm-list --type=module --no-core --status=enabled --format=json" --format=silent --env=' . $siteenv . ' --site=' .$sitename),true);
+$drushversion = shell_exec('terminus drush "status --fields=drush-version" --env=' . $siteenv . ' --site=' .$sitename);
+if(!preg_match('/8\.\d.\d/',$drushversion)){
+  exit("Exiting. Please update Drush to version 8\n");
+}
+if ($framework != 'drupal'){
+  exit("Exiting. This is not a Drupal 7 site.\n");
+}
+  echo "Finding all enabled modules\n";
+  $projects = json_decode(shell_exec('terminus drush "pm-projectinfo --status=enabled --format=json" --format=silent --env=' . $siteenv . ' --site=' .$sitename),true);
+  $modules = array_filter($projects,"moduleFilter");
+  //exit();
   $placeholder = array('name'=> NULL, 'url'=>null, 'status'=> 'Not Available');
+//create result array
   $result = array_fill_keys(array_keys($modules),$placeholder);
+  //compare against modules moved to core
   $alreadyin = array_intersect_key($modules,$incore);
+//populate result array with modules moved to core
   foreach($alreadyin as $module =>$value){
     $result[$module]['url'] = 'https://www.drupal.org/project/' . $module;
     $result[$module]['status'] = "Moved to Core";
-    $result[$module]['name'] = $value['name'];
+    $result[$module]['name'] = $value['label'];
   }
+  //filter out modules moved to core and excluded modules to minimize update API requests
+  //TODO: need to filter out modules that don't exist on d.o. explicitly i.e. xmlsitemap_custom, xmlsitemap_engines
   $diff = array_diff_key($modules,$incore);
   $diff = array_diff_key($diff,$excluded);
+//toss excluded modules out of the results
   $result = array_diff_key($result,$excluded);
+  // for all remaining modules, check for D8.X releases
   foreach($diff as $module => $value){
     $result[$module]['url'] = 'https://www.drupal.org/project/' . $module;
-    $result[$module]['name'] = $value['name'];
+    $result[$module]['name'] = $value['label'];
+    //Check the update api.
     $releasexml = file_get_contents('https://updates.drupal.org/release-history/' . $module . '/8.x');
     if(strstr($releasexml, 'No release history')){
       $result[$module]['status'] = 'Not Available';
     } else {
+      //TODO: Expand with notes about implementation?
       $result[$module]['status'] = 'Available';
     }
   }
+  //Sort results by key because I'm that guy.
   asort($result);
-  var_dump($result);
-  echo  "Module,Status\n";
+  //Dump results in CSV format.
+  echo  "Module, Status, URL\n";
   foreach($result as $module =>$value){
-    echo $value['name'] . ", ". $value['status'] .  "\n";
+    echo $value['name'] . ", ". $value['status']. ", ". $value['url'] .  "\n";
   }
   echo  "\n";
-} else {
-  exit("Exiting. This is not a Drupal 7 site.\n");
-}
