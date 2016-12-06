@@ -14,7 +14,6 @@ $incore = array('admin_language' => 'admin_language',
 'commerce_checkout_login' => 'commerce_checkout_login',
 'commerce_checkout_progress' => 'commerce_checkout_progress',
 'commerce_checkout_redirect' => 'commerce_checkout_redirect',
-'commerce_checkout_redirect' => 'commerce_checkout_redirect',
 'commerce_coupon' => 'commerce_coupon',
 'commerce_custom_product' => 'commerce_custom_product',
 'commerce_discount' => 'commerce_discount',
@@ -98,8 +97,7 @@ $login = json_decode(shell_exec('terminus auth whoami --format=json'),true);
 echo "Logged in as: " . $login['email']. "\n";
 $framework=json_decode(shell_exec('terminus site info --site=' . $sitename . ' --field=framework --format=json'),true);
 if ($framework == 'drupal' && isset($login['email'])){
-  //terminus drush "pm-list --type=module --no-core --status=enabled --format=json" --env=dev --site=panther
-  $modules = json_decode(shell_exec('terminus drush "pm-list --type=module --no-core --status=enabled --format=json" --format=silent --env=dev --site=' .$sitename),true);
+  $modules = json_decode(shell_exec('terminus drush "pm-list --type=module --no-core --status=enabled --format=json" --format=silent --env=' . $siteenv . ' --site=' .$sitename),true);
 //maybe use array_diff_ukey to push values into another array for incore?
   $alreadyin = array_intersect_key($modules,$incore);
   $diff = array_diff_key($modules,$incore);
@@ -108,9 +106,9 @@ if ($framework == 'drupal' && isset($login['email'])){
 
     $releasexml = file_get_contents('https://updates.drupal.org/release-history/' . $module . '/8.x');
     if(strstr($releasexml, 'No release history available for')){
-      array_push($unsupported,$module);
+      $unsupported[$module] = $value;
     } else {
-      array_push($available,$module);
+      $available[$module] = $value;
     }
   }
   var_dump($available);
