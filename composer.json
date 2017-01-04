@@ -1,0 +1,10 @@
+{
+  "name": "hengkit/modulestatus",
+  "description": "A terminus 1.x plugin to determine project status for upgrading D7 to D8",
+  "type": "terminus-plugin",
+  "extra": {
+    "terminus": {
+      "compatible-version": "1.*"
+    }
+  }
+}
